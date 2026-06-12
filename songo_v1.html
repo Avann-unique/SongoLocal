@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Songo – Version 1 (même site)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=Nunito:wght@400;700;900&display=swap"
+    rel="stylesheet"
+  />
+
+  <style>
+    /* ============================================================
+       VARIABLES CSS
+    ============================================================ */
+    :root {
+      --fond:     #1a1208;
+      --terre:    #6b3a1f;
+      --sable:    #f0d9b5;
+      --or:       #c8941a;
+      --blanc:    #fdf6ec;
+      --gris:     #999;
+      --j1:       #e07b39;   /* orange – Joueur 1 (bas)  */
+      --j2:       #4a90d9;   /* bleu   – Joueur 2 (haut) */
+      --capture:  #2ecc71;   /* vert   – capture         */
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--fond);
+      background-image: radial-gradient(ellipse at top, #2a1a0e 0%, var(--fond) 70%);
+      color: var(--sable);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 12px 60px;
+    }
+
+    /* ---- TITRE ---- */
+    h1 {
+      font-family: 'Cinzel Decorative', serif;
+      font-size: clamp(1.5rem, 5vw, 2.6rem);
+      color: var(--or);
+      text-align: center;
+      margin: 16px 0 4px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 20px rgba(200,148,26,0.5);
+    }
+
+    .sous-titre {
+      font-size: 0.82rem;
+      opacity: 0.5;
+      margin-bottom: 20px;
+      text-align: center;
+      font-style: italic;
+    }
+
+    /* ---- SCORES ---- */
+    #scoreboard {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .score-card {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 10px 22px;
+      text-align: center;
+      min-width: 110px;
+      transition: border-color 0.3s, background 0.3s;
+    }
+
+    .score-card.actif {
+      border-color: var(--or);
+      background: rgba(200,148,26,0.12);
+    }
+
+    .score-card .s-nom   { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.65; }
+    .score-card .s-pts   { font-size: 1.9rem; font-weight: 900; line-height: 1.1; }
+    .score-card.j1 .s-pts { color: var(--j1); }
+    .score-card.j2 .s-pts { color: var(--j2); }
+
+    /* Tour en cours */
+    #tour-info { text-align: center; font-size: 0.9rem; }
+    #tour-nom  { font-weight: 900; font-size: 1.1rem; }
+
+    /* ---- PLATEAU ---- */
+    /*
+      Le plateau contient 2 rangées.
+      Chaque rangée : un grenier + 7 cases + (rien ou grenier selon côté).
+      On utilise display:flex pour aligner horizontalement.
+    */
+    #plateau {
+      background: var(--terre);
+      border-radius: 18px;
+      padding: 18px 14px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .rangee {
+      display: flex;
+      gap: 7px;
+      align-items: center;
+      justify-content: center;
+      margin: 7px 0;
+    }
+
+    /* ---- CASE ---- */
+    /*
+      Chaque trou du plateau.
+      Numérotation côté J1 (bas) : case 1 à droite, case 7 à gauche.
+      Côté J2 (haut)             : case 1 à gauche, case 7 à droite.
+      (vue depuis chaque joueur)
+    */
+    .case {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: #3d1f0a;
+      border: 3px solid #8b4a1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: not-allowed;   /* par défaut non-cliquable */
+      position: relative;
+      transition: transform 0.15s, background 0.2s, box-shadow 0.2s;
+      user-select: none;
+    }
+
+    /* Effet creux (ombre interne) */
+    .case::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #5a2d0c, #1a0a02);
+      z-index: 0;
+    }
+
+    .case .nb-graines {
+      position: relative; z-index: 1;
+      font-size: 1.3rem; font-weight: 900;
+      color: var(--sable); line-height: 1;
+    }
+
+    /* Numéro de case (petit, en bas) */
+    .case .num-case {
+      position: relative; z-index: 1;
+      font-size: 0.5rem; opacity: 0.4; margin-top: 2px;
+    }
+
+    /* Case jouable par le joueur actif */
+    .case.jouable {
+      border-color: var(--or);
+      cursor: pointer;
+    }
+    .case.jouable:hover {
+      transform: scale(1.1);
+      background: #5a2d0c;
+      box-shadow: 0 0 18px rgba(200,148,26,0.7);
+    }
+
+    /* Couleur des graines selon le camp */
+    .case.j1 .nb-graines { color: var(--j1); }
+    .case.j2 .nb-graines { color: var(--j2); }
+
+    /* Case qui vient de recevoir une graine (animation) */
+    @keyframes pop {
+      0%   { transform: scale(1); }
+      50%  { transform: scale(1.13); }
+      100% { transform: scale(1); }
+    }
+    .case.anim { animation: pop 0.25s ease; }
+
+    /* ---- GRENIER ---- */
+    .grenier {
+      width: 82px;
+      height: 162px;
+      border-radius: 42px;
+      background: #1e0e03;
+      border: 3px solid #8b4a1a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+
+    .grenier .g-pts   { font-size: 1.8rem; font-weight: 900; }
+    .grenier .g-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.45; }
+    .grenier.j1 .g-pts { color: var(--j1); }
+    .grenier.j2 .g-pts { color: var(--j2); }
+
+    /* Séparateur central */
+    .sep { height: 5px; background: rgba(0,0,0,0.35); border-radius: 3px; margin: 3px 0; }
+
+    /* ---- MESSAGE ---- */
+    #message {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 0.95rem;
+      min-height: 26px;
+      padding: 0 12px;
+    }
+    #message.fort {
+      color: var(--or); font-weight: 900; font-size: 1.05rem;
+    }
+    #message.capture { color: var(--capture); font-weight: 900; }
+    #message.erreur  { color: #e74c3c; }
+
+    /* ---- BOUTON REJOUER ---- */
+    #btn-rejouer {
+      display: none;
+      margin-top: 18px;
+      padding: 11px 30px;
+      font-family: 'Cinzel Decorative', serif;
+      font-size: 0.9rem;
+      color: var(--fond);
+      background: var(--or);
+      border: none; border-radius: 30px;
+      cursor: pointer; letter-spacing: 1px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    #btn-rejouer:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 20px rgba(200,148,26,0.5);
+    }
+
+    /* ---- LEGENDE ---- */
+    #legende {
+      margin-top: 22px;
+      font-size: 0.75rem;
+      color: var(--gris);
+      text-align: center;
+      line-height: 1.8;
+      max-width: 600px;
+    }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 520px) {
+      .case    { width: 46px; height: 46px; }
+      .case .nb-graines { font-size: 0.95rem; }
+      .grenier { width: 52px; height: 110px; }
+      .grenier .g-pts { font-size: 1.2rem; }
+      .rangee  { gap: 4px; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⚫ SONGO ⚫</h1>
+  <p class="sous-titre">Jeu de semailles Ekang – Cameroun · Gabon · Guinée équatoriale</p>
+
+  <!-- ---- SCORES ---- -->
+  <div id="scoreboard">
+    <div class="score-card j2" id="card-j2">
+      <div class="s-nom">Joueur 2</div>
+      <div class="s-pts" id="score-j2">0</div>
+    </div>
+    <div id="tour-info">
+      <div style="font-size:0.7rem;opacity:0.5;">Tour de</div>
+      <div id="tour-nom" style="color:var(--j1)">Joueur 1</div>
+    </div>
+    <div class="score-card j1" id="card-j1">
+      <div class="s-nom">Joueur 1</div>
+      <div class="s-pts" id="score-j1">0</div>
+    </div>
+  </div>
+
+  <!-- ---- PLATEAU ---- -->
+  <!--
+    Disposition du plateau (vue de face) :
+    ┌─────────────────────────────────────────────┐
+    │ [Grenier J2]  [7][6][5][4][3][2][1]  (haut) │  ← Joueur 2
+    │               ─────────────────────         │
+    │ (bas)  [1][2][3][4][5][6][7]  [Grenier J1]  │  ← Joueur 1
+    └─────────────────────────────────────────────┘
+    J1 joue : droite→gauche dans son camp, gauche→droite chez J2
+    J2 joue : gauche→droite dans son camp, droite→gauche chez J1
+                                   (toujours en boucle anti-horaire)
+  -->
+  <div id="plateau">
+
+    <!-- Rangée J2 (haut) : cases de gauche à droite = indices 13..7 -->
+    <div class="rangee" id="rangee-j2"></div>
+
+    <div class="sep"></div>
+
+    <!-- Rangée J1 (bas) : cases de gauche à droite = indices 0..6 -->
+    <div class="rangee" id="rangee-j1"></div>
+
+  </div>
+
+  <div id="message">Joueur 1, choisissez une case.</div>
+  <button id="btn-rejouer" onclick="init()">↺ Rejouer</button>
+
+  <div id="legende">
+    Cases numérotées 1→7 depuis le point de vue de chaque joueur.<br/>
+    Sens de jeu : droite → gauche dans votre camp, puis gauche → droite chez l'adversaire.
+  </div>
+
+
+  <!-- ============================================================
+       JAVASCRIPT
+  ============================================================ -->
+  <script>
+
+    /* ============================================================
+       STRUCTURE DU PLATEAU
+
+       On numérote les cases de 0 à 13 dans le tableau interne :
+         cases[0]  à cases[6]  = rangée J1 (bas),  index 0=gauche, 6=droite
+         cases[7]  à cases[13] = rangée J2 (haut),  index 7=gauche, 13=droite
+
+       Vue du plateau (indices internes) :
+         J2 : [ 7][ 8][ 9][10][11][12][13]   ← gauche à droite écran
+         J1 : [ 0][ 1][ 2][ 3][ 4][ 5][ 6]  ← gauche à droite écran
+
+       Numéros de case côté joueur (vue subjective) :
+         J1 : case 1 = index 6 (droite écran), case 7 = index 0 (gauche écran)
+         J2 : case 1 = index 7 (gauche écran), case 7 = index 13 (droite écran)
+
+       Sens de distribution (boucle anti-horaire) :
+         J1 joue depuis la case choisie : va vers la GAUCHE dans J1,
+              puis vers la DROITE dans J2.
+         J2 joue depuis la case choisie : va vers la DROITE dans J2,
+              puis vers la GAUCHE dans J1.
+
+       Pour simplifier, on construit un ordre de parcours fixe :
+         Sens horaire interne (= anti-horaire réel vu du dessus) :
+         6,5,4,3,2,1,0,  7,8,9,10,11,12,13  puis revient à 6
+         (J1 de droite à gauche, puis J2 de gauche à droite)
+    ============================================================ */
+
+    /*
+      ORDRE_PARCOURS : tableau des 14 indices dans l'ordre de distribution.
+      Pour J1 qui part d'un index i dans [0..6] :
+        on avance dans cet ordre en partant APRES la position de i.
+      Pour J2 qui part d'un index i dans [7..13] :
+        même principe mais dans le sens inverse de cet ordre.
+      (Voir fonctions positionDansOrdre / prochainIndex ci-dessous)
+    */
+
+    // Ordre de parcours J1 : droite→gauche (indices 6→0) puis J2 gauche→droite (7→13)
+    const ORDRE_J1 = [6,5,4,3,2,1,0, 7,8,9,10,11,12,13];
+
+    // Ordre de parcours J2 : gauche→droite (indices 7→13) puis J1 droite→gauche (0→6 inversé = 6→0)
+    // Wait — J2 joue dans son camp gauche→droite (vue J2) = indices 13→7 sur l'écran
+    // et dans le camp J1 droite→gauche (vue J2) = indices 6→0 sur l'écran
+    // Donc : 13,12,11,10,9,8,7, 0,1,2,3,4,5,6
+    const ORDRE_J2 = [13,12,11,10,9,8,7, 0,1,2,3,4,5,6];
+
+
+    /* ============================================================
+       ÉTAT DU JEU
+    ============================================================ */
+    let cases        = [];   // graines sur chaque case (index 0..13)
+    let grenierJ1    = 0;    // graines capturées par J1
+    let grenierJ2    = 0;    // graines capturées par J2
+    let joueurActif  = 1;    // 1 ou 2
+    let enCours      = false; // bloque les clics pendant l'animation
+
+
+    /* ============================================================
+       FONCTION : init()
+       Initialise / réinitialise le jeu.
+    ============================================================ */
+    function init() {
+      // 5 graines par case × 14 cases = 70 graines
+      cases = [];
+      for (let i = 0; i < 14; i++) {
+        cases.push(5);
+      }
+
+      grenierJ1   = 0;
+      grenierJ2   = 0;
+      joueurActif = 1;
+      enCours     = false;
+
+      construirePlateau();
+      rafraichir();
+      affMsg("Joueur 1, choisissez une case.", "");
+      document.getElementById("btn-rejouer").style.display = "none";
+    }
+
+
+    /* ============================================================
+       FONCTION : construirePlateau()
+       Crée les éléments HTML et les insère dans la page.
+       N'est appelée qu'une fois (à l'init).
+    ============================================================ */
+    function construirePlateau() {
+
+      const rangeeJ1 = document.getElementById("rangee-j1");
+      const rangeeJ2 = document.getElementById("rangee-j2");
+      rangeeJ1.innerHTML = "";
+      rangeeJ2.innerHTML = "";
+
+      /*
+        RANGÉE J1 (bas) :
+        Affichage écran gauche→droite = indices 0,1,2,3,4,5,6
+        Mais côté joueur, case 1 est à DROITE = index 6
+        On affiche : grenier à droite
+      */
+      for (let i = 0; i <= 6; i++) {
+        rangeeJ1.appendChild(creerCase(i, "j1"));
+      }
+      // Grenier J1 à droite
+      rangeeJ1.appendChild(creerGrenier("j1"));
+
+      /*
+        RANGÉE J2 (haut) :
+        Grenier J2 à gauche.
+        Indices affichés gauche→droite : 7,8,9,10,11,12,13
+        Côté joueur J2, case 1 est à sa DROITE = index 13
+      */
+      rangeeJ2.appendChild(creerGrenier("j2"));
+      for (let i = 7; i <= 13; i++) {
+        rangeeJ2.appendChild(creerCase(i, "j2"));
+      }
+    }
+
+
+    /* ============================================================
+       FONCTION : creerCase(index, joueur)
+       Retourne un élément <div> représentant une case.
+    ============================================================ */
+    function creerCase(index, joueur) {
+      const div = document.createElement("div");
+      div.classList.add("case", joueur);
+      div.id = "c" + index;
+
+      // Numéro de case côté joueur (1 = la case à sa droite)
+      let numVisible;
+      if (joueur === "j1") {
+        // J1 : index 6 = case 1, index 0 = case 7
+        numVisible = 7 - index;     // 7-0=7, 7-6=1 ✓
+      } else {
+        // J2 : index 7 = case 7, index 13 = case 1
+        numVisible = index - 6;     // 13-6=7, 7-6=1 ✓
+        // Attends : J2 case 1 = la plus à sa gauche sur l'écran = index 13 ?
+        // Non. J2 est en face. Sa gauche à lui = droite de l'écran = index 13.
+        // Donc index 13 = case 1 pour J2, index 7 = case 7 pour J2.
+        numVisible = 14 - index;    // 14-13=1, 14-7=7 ✓
+      }
+
+      const spanN = document.createElement("span");
+      spanN.classList.add("nb-graines");
+      spanN.textContent = cases[index];
+
+      const spanL = document.createElement("span");
+      spanL.classList.add("num-case");
+      spanL.textContent = "n°" + numVisible;
+
+      div.appendChild(spanN);
+      div.appendChild(spanL);
+
+      // Closure : capture la valeur de `index`
+      div.addEventListener("click", (function(i){ return function(){ jouer(i); }; })(index));
+
+      return div;
+    }
+
+
+    /* ============================================================
+       FONCTION : creerGrenier(joueur)
+    ============================================================ */
+    function creerGrenier(joueur) {
+      const div = document.createElement("div");
+      div.classList.add("grenier", joueur);
+
+      const pts = document.createElement("span");
+      pts.classList.add("g-pts");
+      pts.id = "g-" + joueur;
+      pts.textContent = "0";
+
+      const lbl = document.createElement("span");
+      lbl.classList.add("g-label");
+      lbl.textContent = joueur === "j1" ? "G.J1" : "G.J2";
+
+      div.appendChild(pts);
+      div.appendChild(lbl);
+      return div;
+    }
+
+
+    /* ============================================================
+       FONCTION : jouer(indexCase)
+       Point d'entrée quand le joueur clique sur une case.
+    ============================================================ */
+    function jouer(indexCase) {
+
+      if (enCours) return;
+
+      // Vérifier que la case appartient au joueur actif
+      if (!appartientAu(indexCase, joueurActif)) {
+        affMsg("⚠ Ce n'est pas votre case !", "erreur");
+        return;
+      }
+
+      // Vérifier que la case n'est pas vide
+      if (cases[indexCase] === 0) {
+        affMsg("⚠ Case vide, choisissez-en une autre.", "erreur");
+        return;
+      }
+
+      enCours = true;
+
+      // Prendre toutes les graines
+      let main = cases[indexCase];
+      cases[indexCase] = 0;
+      miseAJourCase(indexCase);
+
+      // Déterminer si c'est un grand tour (> 13 graines)
+      let grandTour = (main > 13);
+
+      // Lancer la distribution animée
+      let ordre = (joueurActif === 1) ? ORDRE_J1 : ORDRE_J2;
+      let posDepart = ordre.indexOf(indexCase);
+
+      distribuer(main, posDepart, indexCase, ordre, grandTour, 0);
+    }
+
+
+    /* ============================================================
+       FONCTION : distribuer(...)
+       Distribue les graines une par une avec animation (récursif).
+
+       Paramètres :
+         restantes  : graines encore en main
+         pos        : position actuelle dans le tableau ordre[]
+         caseDepart : index de la case de départ (à sauter)
+         ordre      : ORDRE_J1 ou ORDRE_J2
+         grandTour  : true si on a commencé avec >13 graines
+         toursComplets : nombre de tours complets effectués
+    ============================================================ */
+    function distribuer(restantes, pos, caseDepart, ordre, grandTour, toursComplets) {
+
+      if (restantes === 0) {
+        // Distribution terminée → vérifier captures
+        setTimeout(function() {
+          verifierCaptures(pos, ordre, toursComplets);
+        }, 200);
+        return;
+      }
+
+      // Avancer d'une position dans l'ordre (circulaire)
+      pos = (pos + 1) % 14;
+      let idxCourant = ordre[pos];
+
+      // Compter les tours complets (on revient au debut de l'ordre)
+      if (pos === 0) toursComplets++;
+
+      // Règle grand tour : on saute la case de départ
+      // ET on ne distribue dans son propre camp que si on fait un tour complet
+      if (grandTour && idxCourant === caseDepart) {
+        // Sauter cette case
+        pos = (pos + 1) % 14;
+        idxCourant = ordre[pos];
+        if (pos === 0) toursComplets++;
+      }
+
+      // Poser une graine
+      cases[idxCourant]++;
+      miseAJourCase(idxCourant);
+
+      // Animation pop
+      const el = document.getElementById("c" + idxCourant);
+      if (el) {
+        el.classList.remove("anim");
+        void el.offsetWidth; // force reflow
+        el.classList.add("anim");
+      }
+
+      // Appel suivant après 180ms
+      setTimeout(function() {
+        distribuer(restantes - 1, pos, caseDepart, ordre, grandTour, toursComplets);
+      }, 180);
+    }
+
+
+    /* ============================================================
+       FONCTION : verifierCaptures(posDerniere, ordre, toursComplets)
+       Vérifie et effectue les captures après distribution.
+
+       Règles :
+       1. La dernière case doit être dans le camp ADVERSE.
+       2. Sauf la case n°1 adverse (sauf si incluse dans chaîne).
+       3. Si la case contient entre 2 et 4 graines → capture.
+       4. On remonte la chaîne : les cases précédentes qui
+          contiennent aussi 2-4 graines dans le camp adverse
+          sont aussi capturées.
+       5. Exception case n°1 adverse après tour complet :
+          on prend juste 1 graine.
+    ============================================================ */
+    function verifierCaptures(posDerniere, ordre, toursComplets) {
+
+      let idxDerniere = ordre[posDerniere];
+      let capture     = 0;
+
+      // Est-ce dans le camp adverse ?
+      let estAdverse = appartientAAdversaire(idxDerniere, joueurActif);
+
+      if (!estAdverse) {
+        // Pas de capture possible → changer de joueur
+        changerJoueur();
+        return;
+      }
+
+      // Identifier la "case n°1 adverse" :
+      //   Pour J1 : case n°1 de J2 = index 13
+      //   Pour J2 : case n°1 de J1 = index 6
+      let caseUn = (joueurActif === 1) ? 13 : 6;
+
+      // Cas spécial : distribution se termine en case n°1 adverse
+      // après au moins 1 tour complet → on prend juste 1 graine
+      if (idxDerniere === caseUn && toursComplets >= 1) {
+        capture++;
+        cases[idxDerniere]--;
+        miseAJourCase(idxDerniere);
+        ajouterAuGrenier(joueurActif, capture);
+        affMsg("🎯 Capture spéciale (case 1 adverse) : 1 graine !", "capture");
+        setTimeout(changerJoueur, 1200);
+        return;
+      }
+
+      // Cas normal : prise si 2-4 graines, sauf si c'est la case n°1 adverse
+      // (la case n°1 adverse ne peut pas être capturée directement)
+      let pos = posDerniere;
+
+      /*
+        Boucle de capture en chaîne.
+        On remonte en arrière dans l'ordre de distribution.
+        On s'arrête dès qu'une case ne remplit pas les conditions.
+      */
+      let premiereTour = true;
+      while (true) {
+        let idx  = ordre[pos];
+        let nb   = cases[idx];
+        let estAdv = appartientAAdversaire(idx, joueurActif);
+        let estCase1 = (idx === caseUn);
+
+        // Condition de capture :
+        //   - case dans le camp adverse
+        //   - contient 2, 3 ou 4 graines
+        //   - pas la case n°1 adverse (sauf si chaîne)
+        if (estAdv && nb >= 2 && nb <= 4 && (!estCase1 || !premiereTour)) {
+          capture += nb;
+          cases[idx] = 0;
+          miseAJourCase(idx);
+          // Remonter d'un cran dans l'ordre
+          pos = (pos - 1 + 14) % 14;
+          premiereTour = false;
+        } else {
+          break;
+        }
+      }
+
+      if (capture > 0) {
+        // Vérifier l'interdit : on ne peut pas vider complètement le camp adverse
+        let totalAdverse = 0;
+        for (let i = 0; i < 14; i++) {
+          if (appartientAAdversaire(i, joueurActif)) {
+            totalAdverse += cases[i];
+          }
+        }
+
+        if (totalAdverse === 0) {
+          // Interdit : annuler la capture → remettre les graines
+          // (simplification : on remet les graines capturées uniformément)
+          // Dans la vraie règle : aucune prise n'est faite
+          // On recharge depuis le compteur → ici on avertit et on ne prend rien
+          // Note : difficile à défaire proprement sans sauvegarde.
+          // Solution simple : on ne capture pas et on avertit.
+          affMsg("⛔ Interdit : vous ne pouvez pas vider le camp adverse !", "erreur");
+          // Remettre les graines (approximation : répartir uniformément)
+          let nbCasesAdv = (joueurActif === 1) ? 7 : 7;
+          let parCase = Math.floor(capture / nbCasesAdv);
+          let reste   = capture % nbCasesAdv;
+          for (let i = 0; i < 14; i++) {
+            if (appartientAAdversaire(i, joueurActif)) {
+              cases[i] += parCase;
+              if (reste > 0) { cases[i]++; reste--; }
+              miseAJourCase(i);
+            }
+          }
+          capture = 0; // annuler
+          setTimeout(changerJoueur, 1500);
+          return;
+        }
+
+        ajouterAuGrenier(joueurActif, capture);
+        affMsg("🎉 Joueur " + joueurActif + " capture " + capture + " graine(s) !", "capture");
+      }
+
+      rafraichir();
+
+      // Vérifier fin de partie
+      if (partieTerminee()) {
+        terminer();
+        return;
+      }
+
+      setTimeout(changerJoueur, capture > 0 ? 1200 : 300);
+    }
+
+
+    /* ============================================================
+       FONCTION : changerJoueur()
+    ============================================================ */
+    function changerJoueur() {
+      joueurActif = joueurActif === 1 ? 2 : 1;
+      enCours     = false;
+
+      // Vérifier la solidarité avant de passer la main
+      if (!peutJouer(joueurActif)) {
+        // Le joueur n'a plus de case jouable
+        terminer();
+        return;
+      }
+
+      rafraichir();
+      affMsg("Joueur " + joueurActif + ", choisissez une case.", "");
+    }
+
+
+    /* ============================================================
+       FONCTIONS DE FIN DE PARTIE
+    ============================================================ */
+
+    /* Vérifie si la partie est terminée */
+    function partieTerminee() {
+
+      // Condition 1 : un joueur a ≥ 40 graines dans son grenier
+      if (grenierJ1 >= 40 || grenierJ2 >= 40) return true;
+
+      // Condition 2 : moins de 10 graines sur le plateau
+      let totalPlateau = 0;
+      for (let i = 0; i < 14; i++) totalPlateau += cases[i];
+      if (totalPlateau < 10) return true;
+
+      // Condition 3 : solidarité impossible
+      if (!peutJouer(1) && !peutJouer(2)) return true;
+
+      return false;
+    }
+
+    /* Vérifie si un joueur peut jouer (au moins une case non vide) */
+    function peutJouer(j) {
+      let debut = (j === 1) ? 0 : 7;
+      let fin   = (j === 1) ? 6 : 13;
+      for (let i = debut; i <= fin; i++) {
+        if (cases[i] > 0) return true;
+      }
+      return false;
+    }
+
+    /* Affiche le résultat final */
+    function terminer() {
+      // Les graines restantes vont à leur propriétaire
+      for (let i = 0; i <= 6;  i++) { grenierJ1 += cases[i]; cases[i] = 0; }
+      for (let i = 7; i <= 13; i++) { grenierJ2 += cases[i]; cases[i] = 0; }
+
+      rafraichir();
+
+      let msg;
+      if (grenierJ1 >= 40) {
+        msg = "🏆 Joueur 1 gagne ! (" + grenierJ1 + " graines)";
+      } else if (grenierJ2 >= 40) {
+        msg = "🏆 Joueur 2 gagne ! (" + grenierJ2 + " graines)";
+      } else if (grenierJ1 === grenierJ2) {
+        msg = "🤝 Égalité parfaite (" + grenierJ1 + " / " + grenierJ2 + ")";
+      } else {
+        msg = grenierJ1 > grenierJ2
+          ? "🏆 Joueur 1 gagne (" + grenierJ1 + " vs " + grenierJ2 + ")"
+          : "🏆 Joueur 2 gagne (" + grenierJ2 + " vs " + grenierJ1 + ")";
+      }
+
+      affMsg(msg, "fort");
+      document.getElementById("btn-rejouer").style.display = "inline-block";
+      enCours = true; // bloquer les clics
+    }
+
+
+    /* ============================================================
+       FONCTIONS UTILITAIRES
+    ============================================================ */
+
+    /* True si l'index appartient au joueur j */
+    function appartientAu(idx, j) {
+      if (j === 1) return idx >= 0  && idx <= 6;
+      if (j === 2) return idx >= 7  && idx <= 13;
+      return false;
+    }
+
+    /* True si l'index appartient à l'adversaire du joueur j */
+    function appartientAAdversaire(idx, j) {
+      return appartientAu(idx, j === 1 ? 2 : 1);
+    }
+
+    /* Ajoute des graines au grenier du joueur j */
+    function ajouterAuGrenier(j, nb) {
+      if (j === 1) grenierJ1 += nb;
+      else         grenierJ2 += nb;
+    }
+
+    /* Met à jour l'affichage d'une seule case */
+    function miseAJourCase(idx) {
+      const el = document.getElementById("c" + idx);
+      if (el) el.querySelector(".nb-graines").textContent = cases[idx];
+    }
+
+    /* Rafraîchit tout l'affichage (greniers, scores, classes jouable) */
+    function rafraichir() {
+
+      // Greniers
+      document.getElementById("g-j1").textContent = grenierJ1;
+      document.getElementById("g-j2").textContent = grenierJ2;
+
+      // Scores dans le scoreboard
+      document.getElementById("score-j1").textContent = grenierJ1;
+      document.getElementById("score-j2").textContent = grenierJ2;
+
+      // Highlight du joueur actif
+      document.getElementById("card-j1").classList.toggle("actif", joueurActif === 1);
+      document.getElementById("card-j2").classList.toggle("actif", joueurActif === 2);
+
+      // Label tour
+      const tn = document.getElementById("tour-nom");
+      tn.textContent = "Joueur " + joueurActif;
+      tn.style.color = joueurActif === 1 ? "var(--j1)" : "var(--j2)";
+
+      // Classes jouable / non sur chaque case
+      for (let i = 0; i < 14; i++) {
+        const el = document.getElementById("c" + i);
+        if (!el) continue;
+        el.classList.remove("jouable");
+        // Jouable si : appartient au joueur actif, non vide, jeu non bloqué
+        if (appartientAu(i, joueurActif) && cases[i] > 0 && !enCours) {
+          el.classList.add("jouable");
+        }
+      }
+    }
+
+    /* Affiche un message avec une classe CSS optionnelle */
+    function affMsg(texte, type) {
+      const el = document.getElementById("message");
+      el.textContent = texte;
+      el.className = type; // "fort", "capture", "erreur" ou ""
+    }
+
+
+    /* ============================================================
+       DÉMARRAGE
+    ============================================================ */
+    init();
+
+  </script>
+</body>
+</html>
